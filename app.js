@@ -15,6 +15,8 @@ function createDir(filePath) {
 }
 
 function childProcess(command, args, timeOut = Infinity) {
+  return new Promise((resolve, reject) => {
+    
   let error = "";
   let success = true;
   let start = new Date();
@@ -22,7 +24,7 @@ function childProcess(command, args, timeOut = Infinity) {
   let commandSuccess  = true;
 
   try {
-    const childProcess = child.spawn(command, args, { stdio: 'inherit' });
+    const childProcess = child.spawn(command, args);
 
     childProcess.on('error', (err) => {
       error = err.code;
@@ -30,37 +32,43 @@ function childProcess(command, args, timeOut = Infinity) {
       console.log('error',err.toString());
     });
 
+    childProcess.stderr.on('data', (err) => {
+      success = false;
+      error = err.toString();
+    })
     
     childProcess.on('close', (data) => {
-      duration = (new Date() - start);
-      save(command, duration, start, error, success, commandSuccess);
+      duration = new Date() - start;
+      let params = {
+        command,
+        start,
+        duration,
+        success,
+      }
+    
+      if (error) {
+        params.error = error;
+      }
+    
+      if (!success) {
+        params.commandSuccess = false;
+      }
+      save(params);
+      resolve();
     });
 
     createDir(path.resolve('logs'));
     
   } catch(err) {
+      reject(err);
       console.log(err);
   }
+ })
 }
 
-function save(command, duration, start, error, success, commandSuccess) {
+function save(params) {
   let timestamp = new Date().toISOString().replace(/:/g, '-');
-  let params = {
-    command,
-    start,
-    duration,
-    success,
-  }
-
-  if (error) {
-    params.error = error;
-  }
-
-  if (!success) {
-    params.commandSuccess = false;
-  }
-
-  let filePath = `${timestamp}${command}.json`;
+  let filePath = `${timestamp}${params.command}.json`;
   console.log(filePath);
   fs.writeFile(path.join(path.resolve('logs'), filePath), JSON.stringify(params), (err) => {
     if (err) {
@@ -68,6 +76,4 @@ function save(command, duration, start, error, success, commandSuccess) {
     }
   });
 }
-
-
-childProcess('git', ['--version']);
+export default childProcess;
